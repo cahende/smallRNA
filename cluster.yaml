@@ -1,0 +1,12 @@
+__default__:
+        #set queue
+        QUEUE: open
+        #set walltime
+        WALLTIME: 24:00:00
+        #set nodes and processors
+        NODES: 1
+        PPN: 8
+        #set ram
+        PMEM: 32gb
+        #set email
+        EMAIL: coalhende@gmail.com

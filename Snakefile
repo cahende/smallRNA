@@ -6,32 +6,58 @@ configfile: "config.yaml"
 
 rule all:
     input:
-        expand("data/processedData/aligned_reads/read_group/{sample}.PE.star.sorted.passed.fixed.filtered.postdup.RG.bam", sample=config["SAMPLES"])
+        expand("data/processedData/mirDeep/{sample}/{sample}-report.log", sample=config["SAMPLES"])
 
 rule trim_reads:
     input:
-        expand("data/rawData/{{sample}}_{read}_001.fastq.gz", read=["R1", "R2"])
+        "data/rawData/{sample}_R1_001.fastq.gz"
     output:
-        "data/processedData/trimmed_reads/{sample}_R1_paired.fastq.gz",
-        "data/processedData/trimmed_reads/{sample}_R1_unpaired.fastq.gz",
-        "data/processedData/trimmed_reads/{sample}_R2_paired.fastq.gz",
-        "data/processedData/trimmed_reads/{sample}_R2_unpaired.fastq.gz"
+        "data/processedData/trimmed_reads/{sample}_trimmed.fastq.gz"
     log: "logs/trim/{sample}.trim.log"
     shell:
-        "module load trimmomatic fastqc;"
+        "conda activate bioinfo;"
         "fastqc {input};"
-        "java -jar {config[TRIMMOMATIC]} PE -phred33 -trimlog {log} {input} {output} ILLUMINACLIP:{config[ADAPTERS]}:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:15"
+        "java -jar {config[TRIMMOMATIC]} SE -phred33 -trimlog {log} {input} {output} ILLUMINACLIP:{config[ADAPTERS]}:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:15"
 
 rule decompress_trimmed_reads:
     input:
-        R1="data/processedData/trimmed_reads/{sample}_R1_paired.fastq.gz",
-        R2="data/processedData/trimmed_reads/{sample}_R2_paired.fastq.gz"
+        "data/processedData/trimmed_reads/{sample}_trimmed.fastq.gz"
     output:
-        R1="data/processedData/trimmed_reads/{sample}_R1_paired.fastq",
-        R2="data/processedData/trimmed_reads/{sample}_R2_paired.fastq"
+        "data/processedData/trimmed_reads/{sample}_trimmed.fastq"
     shell:
-        "gunzip -dc {input.R1} > {output.R1};"
-        "gunzip -dc {input.R2} > {output.R2}"
+        "gunzip -dc {input} > {output}"
+
+rule convert_to_fasta:
+    input:
+        "data/processedData/trimmed_reads/{sample}_trimmed.fastq"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}.fasta"
+    shell:
+        "conda activate bioinfo;"
+        "sed '/^@/!d;s//>/;N' {input} > {output};"
+        "sed 's, ,_,g' -i {output}"
+        
+rule map:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}.fasta"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}.arf",
+        "data/processedData/mirDeep/{sample}/{sample}-collapsed.fa"
+    shell:
+        "conda activate bioinfo;"
+        "cd $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/data/processedData/mirDeep/{wildcards.sample}/;"
+        "mapper.pl $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{input} -c -v -i -m -p {config[GENOME]} -s $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{output[1]} -t $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{output[0]}"
+
+rule mirDeep2:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}.arf",
+        "data/processedData/mirDeep/{sample}/{sample}-collapsed.fa"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}-report.log"
+    shell:
+        "conda activate bioinfo;"
+        "cd $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/data/processedData/mirDeep/{wildcards.sample}/;"
+        "miRDeep2.pl $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{input[1]} {config[GENOME]} $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{input[0]} {config[SAME_MATURE]} {config[CLOSE_MATURE]} {config[SAME_PRE]} 2> $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{output}"
 
 #Star map with modified paramaters: >=16b matched to the genome, number of mismatches <= 5% of mapped length, i.e. 0MM for 16-19b, 1MM for 20-39b etc, splicing switched off
 rule star_map:
@@ -41,7 +67,7 @@ rule star_map:
         directory("data/processedData/aligned_reads/star_output/{sample}/")
     log: "logs/{sample}.map_and_bam.log"
     shell:
-        "module load star fastqc;"
+        "conda activate bioinfo;"
         "fastqc {input};"
         "STAR --runThreadN 8 --genomeDir genomes --readFilesIn {input} --sjdbGTFfile {config[GENOME_ANNOTATION]} --outFileNamePrefix {output} \
                 --outFilterMismatchNoverLmax 0.05 --outFilterMatchNmin 16 --outFilterScoreMinOverLread 0  --outFilterMatchNminOverLread 0 --alignIntronMax 1"
