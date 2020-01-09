@@ -29,6 +29,11 @@ GROUP_MAX: "2"
 GENOME: "genomes/anophelesStephensiScaffoldAstel2.fa"
 GENOME_ANNOTATION: "genomes/anophelesStephensiBaseFeaturesAstel2.3.gtf"
 GO_MAPPINGS: "genomes/goMappings.csv"
+#Close species are Aedes aegypti, Culex, Drosophila melanogaster, Bombyx mori, Apis mellifera, Acyrthosiphon pisum
+CLOSE_MATURE: "genomes/combinedCloseMature.fa"
+#All Anopheles gambiae miRNAs used for same species
+SAME_MATURE: "genomes/anGamb-miRNA-mature.fa"
+SAME_PRE: "genomes/anGamb-miRNA-stemLoop.fa"
 
 #Define important paths
 ADAPTERS: "/storage/work/cah422/adapters/adapters.fa"
