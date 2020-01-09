@@ -1,5 +1,5 @@
 #Set working directory
-workdir: "$HOME/scratch/stephensiSmallRNA-november2018-mayvInf"
+WORKDIR: "$HOME/scratch/stephensiSmallRNA-november2018-mayvInf"
 
 #Set sample names
 SAMPLES: ["C_D14_Rep-1_S16",

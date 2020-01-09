@@ -45,8 +45,8 @@ rule map:
         "data/processedData/mirDeep/{sample}/{sample}-collapsed.fa"
     shell:
         "conda activate bioinfo;"
-        "cd $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/data/processedData/mirDeep/{wildcards.sample}/;"
-        "mapper.pl $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{input} -c -v -i -m -p {config[GENOME]} -s $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{output[1]} -t $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{output[0]}"
+        "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
+        "mapper.pl {config[WORKDIR]}/{input} -c -v -i -m -p {config[WORKDIR]}/{config[GENOME]} -s {config[WORKDIR]}/{output[1]} -t {config[WORKDIR]}/{output[0]}"
 
 rule mirDeep2:
     input:
@@ -56,8 +56,8 @@ rule mirDeep2:
         "data/processedData/mirDeep/{sample}/{sample}-report.log"
     shell:
         "conda activate bioinfo;"
-        "cd $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/data/processedData/mirDeep/{wildcards.sample}/;"
-        "miRDeep2.pl $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{input[1]} {config[GENOME]} $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{input[0]} {config[SAME_MATURE]} {config[CLOSE_MATURE]} {config[SAME_PRE]} 2> $HOME/scratch/stephensiSmallRNA-november2018-mayvInf/{output}"
+        "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
+        "miRDeep2.pl {config[WORKDIR]}/{input[1]} {config[GENOME]} {config[WORKDIR]}/{input[0]} {config[SAME_MATURE]} {config[CLOSE_MATURE]} {config[SAME_PRE]} 2> {config[WORKDIR]}/{output}"
 
 #Star map with modified paramaters: >=16b matched to the genome, number of mismatches <= 5% of mapped length, i.e. 0MM for 16-19b, 1MM for 20-39b etc, splicing switched off
 rule star_map:
