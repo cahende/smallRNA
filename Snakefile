@@ -6,7 +6,7 @@ configfile: "config.yaml"
 
 rule all:
     input:
-        expand("data/processedData/mirDeep/{sample}/{sample}-report.log", sample=config["SAMPLES"])
+        expand("data/processedData/mirDeep/{sample}/{sample}-counts.csv", sample=config["SAMPLES"])
 
 rule trim_reads:
     input:
@@ -53,12 +53,38 @@ rule mirDeep2:
         "data/processedData/mirDeep/{sample}/{sample}.arf",
         "data/processedData/mirDeep/{sample}/{sample}-collapsed.fa"
     output:
-        "data/processedData/mirDeep/{sample}/{sample}-report.log"
+        "data/processedData/mirDeep/{sample}/{sample}-report.log",
+        "data/processedData/mirDeep/{sample}/{sample}-results.csv"
     shell:
         "conda activate bioinfo;"
         "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
-        "miRDeep2.pl {config[WORKDIR]}/{input[1]} {config[GENOME]} {config[WORKDIR]}/{input[0]} {config[SAME_MATURE]} {config[CLOSE_MATURE]} {config[SAME_PRE]} 2> {config[WORKDIR]}/{output}"
+        "miRDeep2.pl {config[WORKDIR]}/{input[1]} {config[WORKDIR]}/{config[GENOME]} {config[WORKDIR]}/{input[0]} {config[WORKDIR]}/{config[SAME_MATURE]} {config[WORKDIR]}/{config[CLOSE_MATURE]} {config[WORKDIR]}/{config[SAME_PRE]} 2> {config[WORKDIR]}/{output[0]};"
+        "mv results*.csv {output[1]}"
 
+rule splitMirDeep2Results:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}-results.csv"
+    output:
+        "data/processedData/mirDeep/{sample}/results-{sample}-novel.csv",
+        "data/processedData/mirDeep/{sample}/results-{sample}-known.csv"
+    shell:
+        "conda activate bioinfo;"
+        "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
+        "csplit -f {wildcards.sample} {config[WORKDIR]}/{input} '{{*}}';"
+        "mv {wildcards.sample}01 {output[0]};"
+        "mv {wildcards.sample}03 {output[1]}"
+
+rule isolateMiRNAs:
+    input:
+        "data/processedData/mirDeep/{sample}/results-{sample}-novel.csv",
+        "data/processedData/mirDeep/{sample}/results-{sample}-known.csv"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}-counts.csv",
+        "data/processedData/mirDeep/{sample}/{sample}-novel.fa",
+        "data/processedData/mirDeep/{sample}/{sample}-known.fa"
+    script:
+        "scripts/rScripts/isolate.R"
+        
 #Star map with modified paramaters: >=16b matched to the genome, number of mismatches <= 5% of mapped length, i.e. 0MM for 16-19b, 1MM for 20-39b etc, splicing switched off
 rule star_map:
     input:
