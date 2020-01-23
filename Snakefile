@@ -6,7 +6,9 @@ configfile: "config.yaml"
 
 rule all:
     input:
-        expand("data/processedData/mirDeep/{sample}/{sample}-counts.csv", sample=config["SAMPLES"])
+        expand("data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal-parsed.txt", sample=config["SAMPLES"]),
+        "data/processedData/miRNATotalTargets-parsed.txt",
+        expand("data/processedData/piRNA/{sample}/{sample}-miRNAFiltered.fasta", sample=config["SAMPLES"])
 
 rule trim_reads:
     input:
@@ -59,7 +61,7 @@ rule mirDeep2:
         "conda activate bioinfo;"
         "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
         "miRDeep2.pl {config[WORKDIR]}/{input[1]} {config[WORKDIR]}/{config[GENOME]} {config[WORKDIR]}/{input[0]} {config[WORKDIR]}/{config[SAME_MATURE]} {config[WORKDIR]}/{config[CLOSE_MATURE]} {config[WORKDIR]}/{config[SAME_PRE]} 2> {config[WORKDIR]}/{output[0]};"
-        "mv results*.csv {output[1]}"
+        "mv result*.csv {config[WORKDIR]}/{output[1]}"
 
 rule splitMirDeep2Results:
     input:
@@ -70,9 +72,9 @@ rule splitMirDeep2Results:
     shell:
         "conda activate bioinfo;"
         "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
-        "csplit -f {wildcards.sample} {config[WORKDIR]}/{input} '{{*}}';"
-        "mv {wildcards.sample}01 {output[0]};"
-        "mv {wildcards.sample}03 {output[1]}"
+        "csplit -f {wildcards.sample} {config[WORKDIR]}/{input} /miRDeep2/ '{{*}}';"
+        "mv {wildcards.sample}03 {config[WORKDIR]}/{output[0]};"
+        "mv {wildcards.sample}05 {config[WORKDIR]}/{output[1]}"
 
 rule isolateMiRNAs:
     input:
@@ -84,7 +86,93 @@ rule isolateMiRNAs:
         "data/processedData/mirDeep/{sample}/{sample}-known.fa"
     script:
         "scripts/rScripts/isolate.R"
-        
+
+#Running miRanda according to filtering steps outlined in PMC3017612
+rule IDTargetSitesTotal:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}-novel.fa",
+        "data/processedData/mirDeep/{sample}/{sample}-known.fa"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}-combined.fa",
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal.txt"
+    shell:
+        "conda activate bioinfo;"
+        "cat {input[0]} {input[1]} > {output[0]};"
+        "miranda {output[0]} {config[GENOME]} -out {output[1]} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
+
+rule IDTargetSitesNovel:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}-novel.fa"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesNovel.txt"
+    shell:
+        "conda activate bioinfo;"
+        "miranda {input} {config[GENOME]} -out {output} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
+
+rule IDTargetSitesKnown:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}-known.fa"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesKnown.txt"
+    shell:
+        "conda activate bioinfo;"
+        "miranda {input} {config[GENOME]} -out {output} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
+
+rule parseMiRandaOutput:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesNovel.txt",
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesKnown.txt",
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal.txt"
+    output:
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesNovel-parsed.txt",
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesKnown-parsed.txt",
+        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal-parsed.txt"
+    shell:
+        "grep -A 1 'Scores for this hit:' {input[0]} | sort | grep '>' > data/processedData/mirDeep/{wildcards.sample}/1.tmp;"
+        "cat header.txt data/processedData/mirDeep/{wildcards.sample}/1.tmp > {output[0]};"
+        "rm data/processedData/mirDeep/{wildcards.sample}/1.tmp;"
+        "grep -A 1 'Scores for this hit:' {input[1]} | sort | grep '>' > data/processedData/mirDeep/{wildcards.sample}/2.tmp;"
+        "cat header.txt data/processedData/mirDeep/{wildcards.sample}/2.tmp > {output[1]};"
+        "rm data/processedData/mirDeep/{wildcards.sample}/2.tmp;"
+        "grep -A 1 'Scores for this hit:' {input[2]} | sort | grep '>' > data/processedData/mirDeep/{wildcards.sample}/3.tmp;"
+        "cat header.txt data/processedData/mirDeep/{wildcards.sample}/3.tmp > {output[2]};"
+        "rm data/processedData/mirDeep/{wildcards.sample}/3.tmp"
+
+rule combineAllFastaCollapseAndMiRanda:
+    input:
+        expand("data/processedData/mirDeep/{sample}/{sample}-combined.fa", sample=config["SAMPLES"])
+    output:
+        "data/processedData/miRNATotal.fa",
+        "data/processedData/miRNATotalCollapsed.fa",
+        "data/processedData/miRNATotalTargets.txt"
+    shell:
+        "conda activate bioinfo;"
+        "cat {input} > {output[0]};"
+        "fastx_collapser -i {output[0]} -o {output[1]};"
+        "miranda {output[1]} {config[GENOME]} -out {output[2]} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
+
+rule parseMiRandaOutputCombined:
+    input:
+        "data/processedData/miRNATotalTargets.txt"
+    output:
+        "data/processedData/miRNATotalTargets-parsed.txt"
+    shell:
+        "echo 'mirna Target  Score Energy-Kcal/Mol Query-Aln(start) Query-Aln(end) Subject-Aln(start) Subject-Aln(end) Al-Len Subject-Identity Query-Identity' > header.txt;"
+        "grep -A 1 'Scores for this hit:' {input} | sort | grep '>' > data/processedData/tmp.tmp;"
+        "cat header.txt data/processedData/tmp.tmp > {output};"
+        "rm header.txt"
+   
+rule removeMiRNAsFromRawData:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}.fasta",
+        "data/processedData/miRNATotalCollapsed.fa"
+    output:
+        "data/processedData/piRNA/{sample}/{sample}-miRNAFiltered.fasta"
+    shell:
+        "seqs-{wildcards.sample}=`cat {input[1]}`;"
+        "cp {input[0]} {output};"
+        "for seq in $seqs-{wildcards.sample}; do tac | sed -i '/${{seq}}/I,+1 d' {output} | tac; done"
+
 #Star map with modified paramaters: >=16b matched to the genome, number of mismatches <= 5% of mapped length, i.e. 0MM for 16-19b, 1MM for 20-39b etc, splicing switched off
 rule star_map:
     input:

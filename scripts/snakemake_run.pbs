@@ -16,6 +16,6 @@ cd ~/scratch/stephensiSmallRNA-november2018-mayvInf/
 #run snakemake
 conda activate bioinfo
 snakemake --unlock
-snakemake --ri -j 55 --cluster-config cluster.yaml --cluster "qsub -A {cluster.QUEUE} -l walltime={cluster.WALLTIME} -l nodes={cluster.NODES}:ppn={cluster.PPN} -l pmem={cluster.PMEM} -M {cluster.EMAIL} -mabe"
+snakemake --ri -j 34 --cluster-config cluster.yaml --cluster "qsub -A {cluster.QUEUE} -l walltime={cluster.WALLTIME} -l nodes={cluster.NODES}:ppn={cluster.PPN} -l pmem={cluster.PMEM} -M {cluster.EMAIL} -mabe"
 
 exit;

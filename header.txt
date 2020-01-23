@@ -1,0 +1,1 @@
+mirna Target  Score Energy-Kcal/Mol Query-Aln(start) Query-Aln(end) Subject-Aln(start) Subject-Aln(end) Al-Len Subject-Identity Query-Identity
