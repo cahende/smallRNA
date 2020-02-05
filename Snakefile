@@ -148,7 +148,11 @@ rule combineAllFastaCollapseAndMiRanda:
     shell:
         "conda activate bioinfo;"
         "cat {input} > {output[0]};"
-        "fastx_collapser -i {output[0]} -o {output[1]};"
+        "fasta_nucleotide_changer -d -i {output[0]} -o {output[0]}.tmp;"
+        "rm {output[0]};"
+        "fastx_collapser -i {output[0]}.tmp -o {output[1]};"
+        "fasta_nucleotide_changer -r -i {output[0]}.tmp -o {output[0]};"
+        "rm {output[0]}.tmp;"
         "miranda {output[1]} {config[GENOME]} -out {output[2]} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
 
 rule parseMiRandaOutputCombined:

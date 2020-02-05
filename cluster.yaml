@@ -7,6 +7,6 @@ __default__:
         NODES: 1
         PPN: 8
         #set ram
-        PMEM: 32gb
+        PMEM: 64gb
         #set email
         EMAIL: coalhende@gmail.com
