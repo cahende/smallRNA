@@ -66,7 +66,7 @@ for (i in 1:nrow(known)){
 
 # isoate usable miRNA IDs, sequences, and read counts 
 for (n in 1:length(importantKnown)){
-  IDKnown <- c(IDKnown, known$tag.id[importantKnown[n]])
+  IDKnown <- c(IDKnown, known$mature.miRBase.miRNA[importantKnown[n]])
 }
 
 for (n in 1:length(importantKnown)){
