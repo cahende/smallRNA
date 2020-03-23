@@ -4,6 +4,9 @@ WORKDIR: "$HOME/scratch/stephensiSmallRNA-november2018-mayvInf"
 #Set sample names
 SAMPLES: ["C_D14_Rep-1_S16", "C_D14_Rep-2_S17", "C_D14_Rep-3_S18", "C_D2_Rep-1_S10", "C_D2_Rep-2_S11", "C_D2_Rep-3_S12", "C_D7_Rep-1_S13", "C_D7_Rep-2_S14", "C_D7_Rep-3_S15", "V_D14_Rep-1_S7", "V_D14_Rep-2_S8", "V_D14_Rep-3_S9", "V_D2_Rep-1_S1", "V_D2_Rep-2_S2", "V_D2_Rep-3_S3", "V_D7_Rep-1_S4", "V_D7_Rep-2_S5", "V_D7_Rep-3_S6"]
 
+        #Samples with viral miRNAs detected - Those removes are V_D2_R1, V_D2_R3, C_D2_R1, C_D2_R2, C_D2_R3, C_C_D7_R2, C_D7_R3, C_D14_R1, C_D14_R2, C_D14_R3
+SAMPLES_VIRUS: ["C_D7_Rep-1_S13", "V_D14_Rep-1_S7", "V_D14_Rep-2_S8", "V_D14_Rep-3_S9", "V_D2_Rep-2_S2", "V_D7_Rep-1_S4", "V_D7_Rep-2_S5", "V_D7_Rep-3_S6"]
+
 #Set group ID
 GROUP_ID: ["1", "1", "1", "1", "1", "1", "1", "1", "1", "2", "2", "2", "2", "2", "2", "2", "2", "2"]
 GROUP_MAX: "2"
@@ -11,8 +14,10 @@ GROUP_MAX: "2"
 #Set important paths
 GENOME: "genomes/anophelesStephensiScaffoldAstel2.fa"
 GENOME_ANNOTATION: "genomes/anophelesStephensiBaseFeaturesAstel2.3.gtf"
+BED: "genomes/anophelesStephensiBaseFeaturesAstel2.3.bed"
 GO_MAPPINGS: "genomes/goMappings.csv"
 TRANSCRIPTOME: "genomes/anophelesStephensiTranscriptsAstel2.3.fa" 
+VIRUS_GENOME: "genomes/virus/mayvBeAr20290.fa"
 #Close species are Aedes aegypti, Culex, Drosophila melanogaster, Bombyx mori, Apis mellifera, Acyrthosiphon pisum
 CLOSE_MATURE: "genomes/combinedCloseMature.fa"
 #All Anopheles gambiae miRNAs used for same species

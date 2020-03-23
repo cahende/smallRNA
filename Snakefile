@@ -6,10 +6,11 @@ configfile: "config.yaml"
 
 rule all:
     input:
-        expand("data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal-parsed.txt", sample=config["SAMPLES"]),
-        "data/processedData/miRNATotalTargets-parsed.txt",
-        expand("data/processedData/piRNA/{sample}/{sample}-miRNAFiltered.fasta", sample=config["SAMPLES"])
-
+        expand("data/processedData/virus/{sample}/star_output/{sample}-piRNA-virus.bam", sample=config["SAMPLES"]),
+        expand("data/processedData/piRNA/{sample}/star_output/{sample}-piRNA.bam", sample=config["SAMPLES"]),
+        expand("data/processedData/totalMap/{sample}/star_output/{sample}.bam", sample=config["SAMPLES"]),
+        expand("data/processedData/virusTotal/{sample}/star_output/{sample}-virus.bam", sample=config["SAMPLES"]),
+        expand("data/processedData/condensedOutputVirus/{sampleVirus}-novelVirus.csv", sampleVirus=config["SAMPLES_VIRUS"])
 rule trim_reads:
     input:
         "data/rawData/{sample}_R1_001.fastq.gz"
@@ -50,6 +51,17 @@ rule map:
         "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
         "mapper.pl {config[WORKDIR]}/{input} -c -v -i -m -p {config[WORKDIR]}/{config[GENOME]} -s {config[WORKDIR]}/{output[1]} -t {config[WORKDIR]}/{output[0]}"
 
+rule mapVirus:
+    input:
+        "data/processedData/mirDeep/{sampleVirus}/{sampleVirus}.fasta"
+    output:
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}.arf",
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-collapsed.fa"
+    shell:
+        "conda activate bioinfo;"
+        "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sampleVirus}/;"
+        "mapper.pl {config[WORKDIR]}/{input} -c -v -i -m -p {config[WORKDIR]}/{config[VIRUS_GENOME]} -s {config[WORKDIR]}/{output[1]} -t {config[WORKDIR]}/{output[0]}"
+
 rule mirDeep2:
     input:
         "data/processedData/mirDeep/{sample}/{sample}.arf",
@@ -61,6 +73,23 @@ rule mirDeep2:
         "conda activate bioinfo;"
         "cd {config[WORKDIR]}/data/processedData/mirDeep/{wildcards.sample}/;"
         "miRDeep2.pl {config[WORKDIR]}/{input[1]} {config[WORKDIR]}/{config[GENOME]} {config[WORKDIR]}/{input[0]} {config[WORKDIR]}/{config[SAME_MATURE]} {config[WORKDIR]}/{config[CLOSE_MATURE]} {config[WORKDIR]}/{config[SAME_PRE]} 2> {config[WORKDIR]}/{output[0]};"
+        "mv result*.csv {config[WORKDIR]}/{output[1]}"
+
+rule mirDeep2Virus:
+    input:
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}.arf",
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-collapsed.fa",
+        "data/processedData/mirDeep/miRNACombined-total.fa"
+    output:
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-report.log",
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-results.csv"
+    shell:
+        "conda activate bioinfo;"
+#UNCOMMENT BELOT LINE TO GENERATE VIRUS COMPARATIVE FASTA SEQUENCE
+#        "cat {input[2]} {config[SAME_MATURE]} {config[CLOSE_MATURE]} > genomes/virusRefMiRNA.fa;"
+        "cd {config[WORKDIR]}/data/processedData/mirDeepVirus/{wildcards.sampleVirus}/;"
+        "miRDeep2.pl {config[WORKDIR]}/{input[1]} {config[WORKDIR]}/{config[VIRUS_GENOME]} {config[WORKDIR]}/{input[0]} none {config[WORKDIR]}/genomes/virusRefMiRNA.fa none 2> {config[WORKDIR]}/{output[0]};"
+        "cp {config[WORKDIR]}/{output[0]} {wildcards.sampleVirus}-copy.log;"
         "mv result*.csv {config[WORKDIR]}/{output[1]}"
 
 rule splitMirDeep2Results:
@@ -75,6 +104,19 @@ rule splitMirDeep2Results:
         "csplit -f {wildcards.sample} {config[WORKDIR]}/{input} /miRDeep2/ '{{*}}';"
         "mv {wildcards.sample}03 {config[WORKDIR]}/{output[0]};"
         "mv {wildcards.sample}05 {config[WORKDIR]}/{output[1]}"
+        
+rule splitMirDeep2ResultsVirus:
+    input:
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-results.csv"
+    output:
+        "data/processedData/mirDeepVirus/{sampleVirus}/results-{sampleVirus}-novel.csv",
+        "data/processedData/mirDeepVirus/{sampleVirus}/results-{sampleVirus}-known.csv"
+    shell:
+        "conda activate bioinfo;"
+        "cd {config[WORKDIR]}/data/processedData/mirDeepVirus/{wildcards.sampleVirus}/;"
+        "csplit -f {wildcards.sampleVirus} {config[WORKDIR]}/{input} /miRDeep2/ '{{*}}';"
+        "mv {wildcards.sampleVirus}03 {config[WORKDIR]}/{output[0]};"
+        "mv {wildcards.sampleVirus}05 {config[WORKDIR]}/{output[1]}"
 
 rule isolateMiRNAs:
     input:
@@ -84,209 +126,222 @@ rule isolateMiRNAs:
         "data/processedData/mirDeep/{sample}/{sample}-counts.csv",
         "data/processedData/mirDeep/{sample}/{sample}-novel.fa",
         "data/processedData/mirDeep/{sample}/{sample}-known.fa"
-    script:
-        "scripts/rScripts/isolate.R"
-
-#Running miRanda according to filtering steps outlined in PMC3017612
-rule IDTargetSitesTotal:
-    input:
-        "data/processedData/mirDeep/{sample}/{sample}-novel.fa",
-        "data/processedData/mirDeep/{sample}/{sample}-known.fa"
-    output:
-        "data/processedData/mirDeep/{sample}/{sample}-combined.fa",
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal.txt"
     shell:
         "conda activate bioinfo;"
-        "cat {input[0]} {input[1]} > {output[0]};"
-        "miranda {output[0]} {config[GENOME]} -out {output[1]} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
+        "Rscript scripts/rScripts/isolate.R"
 
-rule IDTargetSitesNovel:
+rule isolateMiRNAsVirus:
     input:
-        "data/processedData/mirDeep/{sample}/{sample}-novel.fa"
+        "data/processedData/mirDeepVirus/{sampleVirus}/results-{sampleVirus}-novel.csv",
+        "data/processedData/mirDeepVirus/{sampleVirus}/results-{sampleVirus}-known.csv"
     output:
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesNovel.txt"
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-counts.csv",
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-novel.fa",
+        "data/processedData/mirDeepVirus/{sampleVirus}/{sampleVirus}-known.fa"
     shell:
         "conda activate bioinfo;"
-        "miranda {input} {config[GENOME]} -out {output} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
+        "Rscript scripts/rScripts/isolate.R"
 
-rule IDTargetSitesKnown:
+rule miRNANovelCombine:
     input:
-        "data/processedData/mirDeep/{sample}/{sample}-known.fa"
+        expand("data/processedData/mirDeep/{samples}/{samples}-novel.fa", samples=config["SAMPLES"])
     output:
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesKnown.txt"
-    shell:
-        "conda activate bioinfo;"
-        "miranda {input} {config[GENOME]} -out {output} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
-
-rule parseMiRandaOutput:
-    input:
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesNovel.txt",
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesKnown.txt",
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal.txt"
-    output:
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesNovel-parsed.txt",
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesKnown-parsed.txt",
-        "data/processedData/mirDeep/{sample}/{sample}-miRandaTargetSitesTotal-parsed.txt"
-    shell:
-        "grep -A 1 'Scores for this hit:' {input[0]} | sort | grep '>' > data/processedData/mirDeep/{wildcards.sample}/1.tmp;"
-        "cat header.txt data/processedData/mirDeep/{wildcards.sample}/1.tmp > {output[0]};"
-        "rm data/processedData/mirDeep/{wildcards.sample}/1.tmp;"
-        "grep -A 1 'Scores for this hit:' {input[1]} | sort | grep '>' > data/processedData/mirDeep/{wildcards.sample}/2.tmp;"
-        "cat header.txt data/processedData/mirDeep/{wildcards.sample}/2.tmp > {output[1]};"
-        "rm data/processedData/mirDeep/{wildcards.sample}/2.tmp;"
-        "grep -A 1 'Scores for this hit:' {input[2]} | sort | grep '>' > data/processedData/mirDeep/{wildcards.sample}/3.tmp;"
-        "cat header.txt data/processedData/mirDeep/{wildcards.sample}/3.tmp > {output[2]};"
-        "rm data/processedData/mirDeep/{wildcards.sample}/3.tmp"
-
-rule combineAllFastaCollapseAndMiRanda:
-    input:
-        expand("data/processedData/mirDeep/{sample}/{sample}-combined.fa", sample=config["SAMPLES"])
-    output:
-        "data/processedData/miRNATotal.fa",
-        "data/processedData/miRNATotalCollapsed.fa",
-        "data/processedData/miRNATotalTargets.txt"
+        "data/processedData/mirDeep/miRNACombined-novelWithDups-old.fa",
+        "data/processedData/mirDeep/miRNACombined-novel-old.fa",
+        "data/processedData/mirDeep/miRNACombined-novel.fa"
     shell:
         "conda activate bioinfo;"
         "cat {input} > {output[0]};"
-        "fasta_nucleotide_changer -d -i {output[0]} -o {output[0]}.tmp;"
-        "rm {output[0]};"
-        "fastx_collapser -i {output[0]}.tmp -o {output[1]};"
-        "fasta_nucleotide_changer -r -i {output[0]}.tmp -o {output[0]};"
-        "rm {output[0]}.tmp;"
-        "miranda {output[1]} {config[GENOME]} -out {output[2]} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet"
+        "seqkit rmdup -s {output[0]} > {output[1]};"
+        "awk '/^>/{{print "">as-mir"" ++i; next}}{{print}}' < {output[1]} > {output[2]}"
 
-rule parseMiRandaOutputCombined:
+rule miRNANovelCombineVirus:
     input:
-        "data/processedData/miRNATotalTargets.txt"
+        expand("data/processedData/mirDeepVirus/{samples}/{samples}-novel.fa", samples=config["SAMPLES"])
     output:
-        "data/processedData/miRNATotalTargets-parsed.txt"
-    shell:
-        "echo 'mirna Target  Score Energy-Kcal/Mol Query-Aln(start) Query-Aln(end) Subject-Aln(start) Subject-Aln(end) Al-Len Subject-Identity Query-Identity' > header.txt;"
-        "grep -A 1 'Scores for this hit:' {input} | sort | grep '>' > data/processedData/tmp.tmp;"
-        "cat header.txt data/processedData/tmp.tmp > {output};"
-        "rm header.txt"
-   
-rule removeMiRNAsFromRawData:
-    input:
-        "data/processedData/mirDeep/{sample}/{sample}.fasta",
-        "data/processedData/miRNATotalCollapsed.fa"
-    output:
-        "data/processedData/piRNA/{sample}/{sample}-miRNAFiltered.fasta"
-    shell:
-        "seqs-{wildcards.sample}=`cat {input[1]}`;"
-        "cp {input[0]} {output};"
-        "for seq in $seqs-{wildcards.sample}; do tac | sed -i '/${{seq}}/I,+1 d' {output} | tac; done"
-
-#Star map with modified paramaters: >=16b matched to the genome, number of mismatches <= 5% of mapped length, i.e. 0MM for 16-19b, 1MM for 20-39b etc, splicing switched off
-rule star_map:
-    input:
-        expand("data/processedData/trimmed_reads/{{sample}}_{read}_paired.fastq", read=["R1", "R2"])
-    output:
-        directory("data/processedData/aligned_reads/star_output/{sample}/")
-    log: "logs/{sample}.map_and_bam.log"
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-novelWithDups-old.fa",
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-novel-old.fa",
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-novel.fa"
     shell:
         "conda activate bioinfo;"
-        "fastqc {input};"
-        "STAR --runThreadN 8 --genomeDir genomes --readFilesIn {input} --sjdbGTFfile {config[GENOME_ANNOTATION]} --outFileNamePrefix {output} \
-                --outFilterMismatchNoverLmax 0.05 --outFilterMatchNmin 16 --outFilterScoreMinOverLread 0  --outFilterMatchNminOverLread 0 --alignIntronMax 1"
+        "cat {input} > {output[0]};"
+        "seqkit rmdup -s {output[0]} > {output[1]};"
+        "awk '/^>/{{print "">mayv-mir"" ++i; next}}{{print}}' < {output[1]} > {output[2]}"
 
-rule sort_bam:
+rule miRNAKnownCombine:
     input:
-        "data/processedData/aligned_reads/star_output/{sample}/"
-    output:
-        "data/processedData/aligned_reads/sorted/{sample}.PE.star.sorted.bam"
-    log: "logs/{sample}.sort_bam.log"
+        expand("data/processedData/mirDeep/{samples}/{samples}-known.fa", samples=config["SAMPLES"])
+    output:         
+        "data/processedData/mirDeep/miRNACombined-knownWithDups.fa",
+        "data/processedData/mirDeep/miRNACombined-known.fa"
     shell:
-        "module load samtools fastqc;"
-        "fastqc {input};"
-        "samtools view -Sb {input}/Aligned.out.sam | samtools sort -o {output} --threads 8"
+        "conda activate bioinfo;"
+        "cat {input} > {output[0]};"
+        "seqkit rmdup -n {output[0]}  > {output[1]}"
 
-rule quality_filter_reads:
+rule miRNAKnownCombineVirus:
     input:
-        "data/processedData/aligned_reads/sorted/{sample}.PE.star.sorted.bam"
+        expand("data/processedData/mirDeepVirus/{samples}/{samples}-known.fa", samples=config["SAMPLES"])
     output:
-        "data/processedData/aligned_reads/quality_filter/{sample}.PE.star.sorted.passed.bam"
-    log: "logs/{sample}.quality_filter_reads.log"
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-knownWithDups.fa",
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-known.fa"
     shell:
-        "module load bamtools fastqc;"
-        "fastqc {input};"
-        "bamtools filter -mapQuality '>=20' -length '<=40' -in {input} -out {output};"
-        "fastqc {output}"
+        "conda activate bioinfo;"
+        "cat {input} > {output[0]};"
+        "seqkit rmdup -n {output[0]}  > {output[1]}"
 
-rule index_bam:
+rule miRNATotalCombine:
     input:
-        "data/processedData/aligned_reads/quality_filter/{sample}.PE.star.sorted.passed.bam"
+        "data/processedData/mirDeep/miRNACombined-novel.fa",
+        "data/processedData/mirDeep/miRNACombined-known.fa"
     output:
-        "data/processedData/aligned_reads/quality_filter/{sample}.PE.star.sorted.passed.bam.bai"
-    log: "logs/{sample}.index_bam.log"
+        "data/processedData/mirDeep/miRNACombined-total.fa"
     shell:
-        "module load samtools fastqc;"
-        "fastqc {input};"
-        "samtools index {input} {output}"
+        "cat {input} > {output}"
 
-rule fix_mate_pairs:
+rule miRNATotalCombineVirus:
     input:
-        "data/processedData/aligned_reads/quality_filter/{sample}.PE.star.sorted.passed.bam"
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-novel.fa",
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-known.fa"
     output:
-        "data/processedData/aligned_reads/fix_mate_pairs/{sample}.PE.star.sorted.passed.fixed.bam"
-    log: "logs/{sample}.fix_mate_pairs.log"
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-total.fa"
     shell:
-        "module load picard fastqc;"
-        "fastqc {input};"
-        "java -jar {config[PICARD]} FixMateInformation INPUT={input} OUTPUT={output} SORT_ORDER=coordinate VALIDATION_STRINGENCY=LENIENT CREATE_INDEX=true"
+        "cat {input} > {output}"
 
-rule filter_mapped_and_paired_reads:
+rule renameNovelmiRNA:
     input:
-        "data/processedData/aligned_reads/fix_mate_pairs/{sample}.PE.star.sorted.passed.fixed.bam"
+        "data/processedData/mirDeep/{sample}/{sample}-novel.fa",
+        "data/processedData/mirDeep/miRNACombined-novel.fa"
     output:
-        "data/processedData/aligned_reads/mapped_and_paired_filter/{sample}.PE.star.sorted.passed.fixed.filtered.bam"
-    log: "logs/{sample}.filter_mapped_and_paired_reads.log"
+        "data/processedData/mirDeep/{sample}/{sample}-novelRenamed.fa"
     shell:
-        "module load bamtools fastqc;"
-        "fastqc {input};"
-        "bamtools filter -isMapped true -in {input} -out {output}"
+        "grep -f {input[0]} {input[1]} -B1 | grep -v -- ""^--$"" > {output}"
 
-rule remove_duplicate_reads:
+
+rule combineMiRNAs:
     input:
-        "data/processedData/aligned_reads/mapped_and_paired_filter/{sample}.PE.star.sorted.passed.fixed.filtered.bam"
+        "data/processedData/mirDeep/{sample}/{sample}-novelRenamed.fa",
+        "data/processedData/mirDeep/{sample}/{sample}-known.fa"
     output:
-        "data/processedData/aligned_reads/duplicate_removal/{sample}.PE.star.sorted.passed.fixed.filtered.postdup.bam"
-    log: "logs/{sample}.remove_duplicate_reads.log"
+        "data/processedData/mirDeep/{sample}/{sample}-combined.fa"
     shell:
-        "module load picard fastqc;"
-        "fastqc {input};"
-        "java -jar {config[PICARD]} MarkDuplicates INPUT={input} OUTPUT={output} VALIDATION_STRINGENCY=SILENT REMOVE_DUPLICATES=true MAX_FILE_HANDLES_FOR_READ_ENDS_MAP=4000 METRICS_FILE={log}"
+        "cat {input[0]} {input[1]} > {output}"
 
-rule add_read_groups:
+rule isolateCondenseReadCounts:
     input:
-        "data/processedData/aligned_reads/duplicate_removal/{sample}.PE.star.sorted.passed.fixed.filtered.postdup.bam"
+        "data/processedData/mirDeep/{sample}/results-{sample}-novel.csv",
+        "data/processedData/mirDeep/{sample}/results-{sample}-known.csv",
+        "data/processedData/mirDeep/miRNACombined-novel.fa"
     output:
-        "data/processedData/aligned_reads/read_group/{sample}.PE.star.sorted.passed.fixed.filtered.postdup.RG.bam"
-    log: "logs/{sample}.add_read_groups.log"
-    shell:
-        "module load picard fastqc;"
-        "fastqc {input};"
-        "java -jar {config[PICARD]} AddOrReplaceReadGroups INPUT={input} OUTPUT={output} RGLB={wildcards.sample}.PE RGPL=Illumina RGPU=Group1 RGSM={wildcards.sample}.PE"
-
-rule rSubread:
-    input:
-        "data/processedData/aligned_reads/quality_filter/{sample}.PE.star.sorted.passed.fixed.filtered.postdup.RG.bam"
-    output:
-        "data/processedData/read_counts/{sample}.readCounts.txt"
-    log: "logs/{sample}.rSubread.log"
+        "data/processedData/condensedOutput/{sample}-novel.csv",
+        "data/processedData/condensedOutput/{sample}-known.csv"
     script:
-        "scripts/rScripts/rSubreadFeatureCounts.R"
+        "scripts/rScripts/condenseReads.R"
 
-rule differential_expression:
+rule isolateCondenseReadCountsVirus:
     input:
-        expand("data/processedData/read_counts/{sample}.readCounts.txt", sample=config["SAMPLES"])
+        "data/processedData/mirDeepVirus/{sampleVirus}/results-{sampleVirus}-novel.csv",
+        "data/processedData/mirDeepVirus/{sampleVirus}/results-{sampleVirus}-known.csv",
+        "data/processedData/mirDeepVirus/miRNACombinedVirus-novel.fa"
     output:
-        "data/processedData/differentialExpression/glmControlVsInfectedPValue.txt",
-        "data/processedData/differentialExpression/topGOTerms-BP.csv",
-        "data/processedData/differentialExpression/topGOTerms-MF.csv",
-        "data/processedData/differentialExpression/topGOTerms-CC.csv"
-    log: "logs/edgeR.log"
+        "data/processedData/condensedOutputVirus/{sampleVirus}-novelVirus.csv",
+        "data/processedData/condensedOutputVirus/{sampleVirus}-knownVirus.csv"
     script:
-        "scripts/rScripts/edgeR.R"
+        "scripts/rScripts/condenseReads.R"
 
+rule IDTargetSitesTotal:
+    input:
+        "data/processedData/mirDeep/miRNACombined-novel.fa",
+        "data/processedData/mirDeep/miRNACombined-known.fa"
+    output:
+        "data/processedData/mirDeep/miRandaTargetSites-totalNovel.txt",
+        "data/processedData/mirDeep/miRandaTargetSites-totalknown.txt"
+    shell:
+        "conda activate bioinfo;"
+        "miranda {input[0]} {config[GENOME]} -out {output[0]} -strict -sc 140 -go -9 -ge -4 -en -20 -quiet;"
 
+rule parseMiRandaTotal:
+    input:
+        "data/processedData/mirDeep/miRandaTargetSites-totalNovel.txt",
+        "data/processedData/mirDeep/miRandaTargetSites-totalknown.txt"
+    output:
+        "data/processedData/mirDeep/miRandaTargetSites-totalNovel-parsed.txt",
+        "data/processedData/mirDeep/miRandaTargetSites-totalKnown-parsed.txt"
+    shell:
+        "grep -A 1 'Scores for this hit:' {input[0]} | sort | grep '>' > data/processedData/mirDeep/1.tmp;"
+        "cat header.txt data/processedData/mirDeep/1.tmp > {output[0]};"
+        "grep -A 1 'Scores for this hit:' {input[1]} | sort | grep '>' > data/processedData/mirDeep/2.tmp;"
+        "cat header.txt data/processedData/mirDeep/2.tmp > {output[1]};"
+        "rm data/processedData/mirDeep/*.tmp"
+
+rule retreiveAnnotationsTotal:
+    input:
+        "data/processedData/mirDeep/miRandaTargetSites-totalNovel-parsed.txt",
+        "data/processedData/mirDeep/miRandaTargetSites-totalKnown-parsed.txt"
+    output:
+        "data/processedData/mirDeep/miRandaTargetSitesNovel-annotationsRaw.txt",
+        "data/processedData/mirDeep/miRandaTargetSitesNovel-annotations.txt",
+        "data/processedData/mirDeep/miRandaTargetSitesKnown-annotationsRaw.txt",
+        "data/processedData/mirDeep/miRandaTargetSitesKnown-annotations.txt"
+    shell:
+        "conda activate bioinfo;"
+        "awk '{{$2=$3=$5=$6=$7=$8=""; print $0}}' {input[0]} > {output[0]};"
+        "bedtools intersect -a {config[BED]} -b {output[0]} -wa -wb > {output[1]};"
+        "awk '{{$2=$3=$5=$6=$7=$8=""; print $0}}' {input[1]} > {output[2]};"
+        "bedtools intersect -a {config[BED]} -b {output[2]} -wa -wb > {output[3]}"
+
+rule removeMiRNAsFromRawDataAndSizeFilter:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}.fasta",
+        "data/processedData/mirDeep/miRNACombined-total.fa"
+    output:
+        "data/processedData/piRNA/{sample}/{sample}-miRNARemoved.fa",
+        "data/processedData/piRNA/{sample}/{sample}-FilteredForAlign.fa"
+    shell:
+        "conda activate bioinfo;"
+        "cat {input[0]} | seqkit grep -ivsf <(seqkit seq -s --rna2dna {input[1]}) > {output[0]};"
+        "seqkit seq -m 24 -M 30 {output[0]} > {output[1]}"
+
+rule piRNAStarMap:
+    input:
+        "data/processedData/piRNA/{sample}/{sample}-FilteredForAlign.fa"
+    output:
+        "data/processedData/piRNA/{sample}/star_output/{sample}-piRNA.bam"
+    shell:
+        "conda activate bioinfo;"
+        "STAR --runThreadN 8 --genomeDir genomes --readFilesIn {input} --sjdbGTFfile {config[GENOME_ANNOTATION]} --outFileNamePrefix  data/processedData/piRNA/{wildcards.sample}/star_output/ --outFilterMismatchNmax 3;"
+        "samtools view -S -b data/processedData/piRNA/{wildcards.sample}/star_output/Aligned.out.sam | samtools sort > {output};"
+        "samtools index {output}"
+
+rule piRNAStarMapVirus:
+    input:
+        "data/processedData/piRNA/{sample}/{sample}-FilteredForAlign.fa"
+    output:
+        "data/processedData/virus/{sample}/star_output/{sample}-piRNA-virus.bam"
+    shell:
+        "conda activate bioinfo;"
+        "STAR --runThreadN 8 --genomeDir genomes/virus --readFilesIn {input} --outFileNamePrefix  data/processedData/virus/{wildcards.sample}/star_output/ --outFilterMismatchNmax 3;"
+        "samtools view -S -b data/processedData/virus/{wildcards.sample}/star_output/Aligned.out.sam | samtools sort > {output};"
+        "samtools index {output}"
+
+rule smallRNATotalMap:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}.fasta"
+    output:
+        "data/processedData/totalMap/{sample}/star_output/{sample}.bam"
+    shell:
+        "conda activate bioinfo;"
+        "STAR --runThreadN 8 --genomeDir genomes --readFilesIn {input} --sjdbGTFfile {config[GENOME_ANNOTATION]} --outFileNamePrefix data/processedData/totalMap/{wildcards.sample}/star_output/ --outFilterMismatchNmax 3;"     
+        "samtools view -S -b data/processedData/totalMap/{wildcards.sample}/star_output/Aligned.out.sam | samtools sort > {output};"
+        "samtools index {output}"
+
+rule totalStarMapVirus:
+    input:
+        "data/processedData/mirDeep/{sample}/{sample}.fasta"
+    output:
+        "data/processedData/virusTotal/{sample}/star_output/{sample}-virus.bam"
+    shell:
+        "conda activate bioinfo;"
+        "STAR --runThreadN 8 --genomeDir genomes/virus --readFilesIn {input} --outFileNamePrefix  data/processedData/virusTotal/{wildcards.sample}/star_output/ --outFilterMismatchNmax 3;"
+        "samtools view -S -b data/processedData/virusTotal/{wildcards.sample}/star_output/Aligned.out.sam | samtools sort > {output};"
+        "samtools index {output}"
